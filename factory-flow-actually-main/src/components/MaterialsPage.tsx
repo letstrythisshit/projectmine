@@ -1,15 +1,15 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { getMaterials, saveMaterials, Material, exportToCSV } from '@/lib/storage';
+import { createMaterial, deleteMaterial, getMaterials, Material, updateMaterial, exportToCSV } from '@/lib/storage';
 import { Plus, Search, ArrowUpDown, Pencil, Trash2, FileDown } from 'lucide-react';
 
 export const MaterialsPage = () => {
-  const [materials, setMaterials] = useState<Material[]>(getMaterials());
+  const [materials, setMaterials] = useState<Material[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'cost' | 'date'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -23,6 +23,23 @@ export const MaterialsPage = () => {
     unit: '',
     stock: '',
   });
+
+  useEffect(() => {
+    const loadMaterials = async () => {
+      try {
+        const data = await getMaterials();
+        setMaterials(data);
+      } catch (error) {
+        toast({
+          title: 'Unable to load materials',
+          description: error instanceof Error ? error.message : 'Server error',
+          variant: 'destructive',
+        });
+      }
+    };
+
+    loadMaterials();
+  }, [toast]);
 
   const filteredAndSortedMaterials = useMemo(() => {
     let filtered = materials.filter(material =>
@@ -44,7 +61,7 @@ export const MaterialsPage = () => {
     return filtered;
   }, [materials, searchQuery, sortBy, sortOrder]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const materialData: Material = editingMaterial
@@ -58,28 +75,47 @@ export const MaterialsPage = () => {
           createdAt: new Date().toISOString(),
         };
 
-    const updatedMaterials = editingMaterial
-      ? materials.map(m => m.id === editingMaterial.id ? materialData : m)
-      : [...materials, materialData];
+    try {
+      if (editingMaterial) {
+        const saved = await updateMaterial(materialData);
+        setMaterials(materials.map(m => (m.id === saved.id ? saved : m)));
+        toast({
+          title: 'Material updated',
+          description: `${saved.name} has been updated successfully.`,
+        });
+      } else {
+        const saved = await createMaterial(materialData);
+        setMaterials([...materials, saved]);
+        toast({
+          title: 'Material created',
+          description: `${saved.name} has been added successfully.`,
+        });
+      }
 
-    setMaterials(updatedMaterials);
-    saveMaterials(updatedMaterials);
-
-    toast({
-      title: editingMaterial ? 'Material updated' : 'Material created',
-      description: `${materialData.name} has been ${editingMaterial ? 'updated' : 'added'} successfully.`,
-    });
-
-    setFormData({ name: '', cost: '', unit: '', stock: '' });
-    setEditingMaterial(null);
-    setIsDialogOpen(false);
+      setFormData({ name: '', cost: '', unit: '', stock: '' });
+      setEditingMaterial(null);
+      setIsDialogOpen(false);
+    } catch (error) {
+      toast({
+        title: 'Unable to save material',
+        description: error instanceof Error ? error.message : 'Server error',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleDelete = (id: string) => {
-    const updatedMaterials = materials.filter(m => m.id !== id);
-    setMaterials(updatedMaterials);
-    saveMaterials(updatedMaterials);
-    toast({ title: 'Material deleted', description: 'Material has been removed successfully.' });
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteMaterial(id);
+      setMaterials(materials.filter(m => m.id !== id));
+      toast({ title: 'Material deleted', description: 'Material has been removed successfully.' });
+    } catch (error) {
+      toast({
+        title: 'Unable to delete material',
+        description: error instanceof Error ? error.message : 'Server error',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleEdit = (material: Material) => {

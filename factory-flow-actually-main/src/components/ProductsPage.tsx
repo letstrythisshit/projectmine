@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,12 +6,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { getProducts, saveProducts, getMaterials, Product, exportToCSV } from '@/lib/storage';
+import { createProduct, deleteProduct, getMaterials, getProducts, Material, Product, updateProduct, exportToCSV } from '@/lib/storage';
 import { Plus, Search, ArrowUpDown, Pencil, Trash2, FileDown } from 'lucide-react';
 
 export const ProductsPage = () => {
-  const [products, setProducts] = useState<Product[]>(getProducts());
-  const materials = getMaterials();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'cost' | 'date'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -23,6 +23,24 @@ export const ProductsPage = () => {
     name: '',
     materials: [] as { materialId: string; quantity: number }[],
   });
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [productData, materialData] = await Promise.all([getProducts(), getMaterials()]);
+        setProducts(productData);
+        setMaterials(materialData);
+      } catch (error) {
+        toast({
+          title: 'Unable to load data',
+          description: error instanceof Error ? error.message : 'Server error',
+          variant: 'destructive',
+        });
+      }
+    };
+
+    loadData();
+  }, [toast]);
 
   const calculateProductCost = (productMaterials: { materialId: string; quantity: number }[]) => {
     return productMaterials.reduce((sum, pm) => {
@@ -53,7 +71,7 @@ export const ProductsPage = () => {
     return filtered;
   }, [products, searchQuery, sortBy, sortOrder, materials]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (formData.materials.length === 0) {
@@ -74,28 +92,47 @@ export const ProductsPage = () => {
           createdAt: new Date().toISOString(),
         };
 
-    const updatedProducts = editingProduct
-      ? products.map(p => p.id === editingProduct.id ? productData : p)
-      : [...products, productData];
+    try {
+      if (editingProduct) {
+        const saved = await updateProduct(productData);
+        setProducts(products.map(p => (p.id === saved.id ? saved : p)));
+        toast({
+          title: 'Product updated',
+          description: `${saved.name} has been updated successfully.`,
+        });
+      } else {
+        const saved = await createProduct(productData);
+        setProducts([...products, saved]);
+        toast({
+          title: 'Product created',
+          description: `${saved.name} has been added successfully.`,
+        });
+      }
 
-    setProducts(updatedProducts);
-    saveProducts(updatedProducts);
-
-    toast({
-      title: editingProduct ? 'Product updated' : 'Product created',
-      description: `${productData.name} has been ${editingProduct ? 'updated' : 'added'} successfully.`,
-    });
-
-    setFormData({ name: '', materials: [] });
-    setEditingProduct(null);
-    setIsDialogOpen(false);
+      setFormData({ name: '', materials: [] });
+      setEditingProduct(null);
+      setIsDialogOpen(false);
+    } catch (error) {
+      toast({
+        title: 'Unable to save product',
+        description: error instanceof Error ? error.message : 'Server error',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleDelete = (id: string) => {
-    const updatedProducts = products.filter(p => p.id !== id);
-    setProducts(updatedProducts);
-    saveProducts(updatedProducts);
-    toast({ title: 'Product deleted', description: 'Product has been removed successfully.' });
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteProduct(id);
+      setProducts(products.filter(p => p.id !== id));
+      toast({ title: 'Product deleted', description: 'Product has been removed successfully.' });
+    } catch (error) {
+      toast({
+        title: 'Unable to delete product',
+        description: error instanceof Error ? error.message : 'Server error',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleEdit = (product: Product) => {

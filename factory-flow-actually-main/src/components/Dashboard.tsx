@@ -1,11 +1,27 @@
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getOrders, getMaterials, getProducts } from '@/lib/storage';
+import { getOrders, getMaterials, getProducts, Material, Order, Product } from '@/lib/storage';
 import { ShoppingCart, Package, Box, TrendingUp } from 'lucide-react';
 
 export const Dashboard = () => {
-  const orders = getOrders();
-  const materials = getMaterials();
-  const products = getProducts();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+
+  useEffect(() => {
+    const loadData = async () => {
+      const [orderData, materialData, productData] = await Promise.all([
+        getOrders(),
+        getMaterials(),
+        getProducts(),
+      ]);
+      setOrders(orderData);
+      setMaterials(materialData);
+      setProducts(productData);
+    };
+
+    loadData();
+  }, []);
 
   const totalRevenue = orders
     .filter(o => o.status === 'completed')

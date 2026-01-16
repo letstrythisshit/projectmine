@@ -28,7 +28,6 @@ export const Layout = ({ children, currentPage, onNavigate, onLogout }: LayoutPr
 
   return (
     <div className="min-h-screen flex bg-background">
-      {/* Sidebar */}
       <aside className="w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
         <div className="p-6 border-b border-sidebar-border">
           <div className="flex items-center gap-2">
@@ -78,7 +77,6 @@ export const Layout = ({ children, currentPage, onNavigate, onLogout }: LayoutPr
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 overflow-auto">
         {children}
       </main>
