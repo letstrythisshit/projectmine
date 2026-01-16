@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { getUsers, setCurrentUser, initializeStorage } from '@/lib/storage';
+import { getUsers, setCurrentUser } from '@/lib/storage';
 import { Package } from 'lucide-react';
 
 interface LoginPageProps {
@@ -16,24 +16,31 @@ export const LoginPage = ({ onLogin }: LoginPageProps) => {
   const [password, setPassword] = useState('');
   const { toast } = useToast();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    initializeStorage();
-    const users = getUsers();
-    const user = users.find(u => u.email === email && u.password === password);
-    
-    if (user) {
-      setCurrentUser(user);
-      toast({
-        title: 'Login successful',
-        description: `Welcome back, ${user.name}!`,
-      });
-      onLogin();
-    } else {
+
+    try {
+      const users = await getUsers();
+      const user = users.find(u => u.email === email && u.password === password);
+
+      if (user) {
+        setCurrentUser(user);
+        toast({
+          title: 'Login successful',
+          description: `Welcome back, ${user.name}!`,
+        });
+        onLogin();
+      } else {
+        toast({
+          title: 'Login failed',
+          description: 'Invalid email or password',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
       toast({
         title: 'Login failed',
-        description: 'Invalid email or password',
+        description: error instanceof Error ? error.message : 'Unable to reach server',
         variant: 'destructive',
       });
     }

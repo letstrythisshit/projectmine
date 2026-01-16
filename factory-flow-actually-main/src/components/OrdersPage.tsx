@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,13 +6,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { getOrders, saveOrders, getProducts, getMaterials, Order, exportToCSV, calculateOrderCost } from '@/lib/storage';
+import { createOrder, deleteOrder, getOrders, getProducts, getMaterials, Material, Order, Product, updateOrder, exportToCSV, calculateOrderCost } from '@/lib/storage';
 import { Plus, Search, ArrowUpDown, Pencil, Trash2, FileDown } from 'lucide-react';
 
 export const OrdersPage = () => {
-  const [orders, setOrders] = useState<Order[]>(getOrders());
-  const products = getProducts();
-  const materials = getMaterials();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'number' | 'cost' | 'date'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -26,6 +26,29 @@ export const OrdersPage = () => {
     status: 'pending' as 'pending' | 'in-progress' | 'completed',
     leftovers: [] as { materialId: string; quantity: number }[],
   });
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [orderData, productData, materialData] = await Promise.all([
+          getOrders(),
+          getProducts(),
+          getMaterials(),
+        ]);
+        setOrders(orderData);
+        setProducts(productData);
+        setMaterials(materialData);
+      } catch (error) {
+        toast({
+          title: 'Unable to load data',
+          description: error instanceof Error ? error.message : 'Server error',
+          variant: 'destructive',
+        });
+      }
+    };
+
+    loadData();
+  }, [toast]);
 
   const filteredAndSortedOrders = useMemo(() => {
     let filtered = orders.filter(order =>
@@ -47,7 +70,7 @@ export const OrdersPage = () => {
     return filtered;
   }, [orders, searchQuery, sortBy, sortOrder]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (formData.products.length === 0) {
@@ -79,28 +102,47 @@ export const OrdersPage = () => {
           completedAt: formData.status === 'completed' ? new Date().toISOString() : undefined,
         };
 
-    const updatedOrders = editingOrder
-      ? orders.map(o => o.id === editingOrder.id ? orderData : o)
-      : [...orders, orderData];
+    try {
+      if (editingOrder) {
+        const saved = await updateOrder(orderData);
+        setOrders(orders.map(o => (o.id === saved.id ? saved : o)));
+        toast({
+          title: 'Order updated',
+          description: `Order ${saved.orderNumber} has been updated successfully.`,
+        });
+      } else {
+        const saved = await createOrder(orderData);
+        setOrders([...orders, saved]);
+        toast({
+          title: 'Order created',
+          description: `Order ${saved.orderNumber} has been created successfully.`,
+        });
+      }
 
-    setOrders(updatedOrders);
-    saveOrders(updatedOrders);
-
-    toast({
-      title: editingOrder ? 'Order updated' : 'Order created',
-      description: `Order ${orderData.orderNumber} has been ${editingOrder ? 'updated' : 'created'} successfully.`,
-    });
-
-    setFormData({ orderNumber: '', products: [], status: 'pending', leftovers: [] });
-    setEditingOrder(null);
-    setIsDialogOpen(false);
+      setFormData({ orderNumber: '', products: [], status: 'pending', leftovers: [] });
+      setEditingOrder(null);
+      setIsDialogOpen(false);
+    } catch (error) {
+      toast({
+        title: 'Unable to save order',
+        description: error instanceof Error ? error.message : 'Server error',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleDelete = (id: string) => {
-    const updatedOrders = orders.filter(o => o.id !== id);
-    setOrders(updatedOrders);
-    saveOrders(updatedOrders);
-    toast({ title: 'Order deleted', description: 'Order has been removed successfully.' });
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteOrder(id);
+      setOrders(orders.filter(o => o.id !== id));
+      toast({ title: 'Order deleted', description: 'Order has been removed successfully.' });
+    } catch (error) {
+      toast({
+        title: 'Unable to delete order',
+        description: error instanceof Error ? error.message : 'Server error',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleEdit = (order: Order) => {

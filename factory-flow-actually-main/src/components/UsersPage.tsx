@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,12 +6,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { getUsers, saveUsers, User, getCurrentUser } from '@/lib/storage';
+import { createUser, deleteUser, getUsers, getCurrentUser, updateUser, User } from '@/lib/storage';
 import { Plus, Pencil, Trash2, Shield } from 'lucide-react';
 
 export const UsersPage = () => {
   const currentUser = getCurrentUser();
-  const [users, setUsers] = useState<User[]>(getUsers());
+  const [users, setUsers] = useState<User[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const { toast } = useToast();
@@ -25,10 +25,26 @@ export const UsersPage = () => {
     password: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const data = await getUsers();
+        setUsers(data);
+      } catch (error) {
+        toast({
+          title: 'Unable to load users',
+          description: error instanceof Error ? error.message : 'Server error',
+          variant: 'destructive',
+        });
+      }
+    };
+
+    loadUsers();
+  }, [toast]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validation
     if (!formData.email.includes('@')) {
       toast({
         title: 'Validation Error',
@@ -54,24 +70,36 @@ export const UsersPage = () => {
           ...formData,
         };
 
-    const updatedUsers = editingUser
-      ? users.map(u => u.id === editingUser.id ? userData : u)
-      : [...users, userData];
+    try {
+      if (editingUser) {
+        const saved = await updateUser(userData);
+        setUsers(users.map(u => (u.id === saved.id ? saved : u)));
+        toast({
+          title: 'User updated',
+          description: `${saved.name} ${saved.surname} has been updated successfully.`,
+        });
+      } else {
+        const saved = await createUser(userData);
+        setUsers([...users, saved]);
+        toast({
+          title: 'User created',
+          description: `${saved.name} ${saved.surname} has been added successfully.`,
+        });
+      }
 
-    setUsers(updatedUsers);
-    saveUsers(updatedUsers);
-
-    toast({
-      title: editingUser ? 'User updated' : 'User created',
-      description: `${userData.name} ${userData.surname} has been ${editingUser ? 'updated' : 'added'} successfully.`,
-    });
-
-    setFormData({ email: '', name: '', surname: '', phone: '', role: 'employee', password: '' });
-    setEditingUser(null);
-    setIsDialogOpen(false);
+      setFormData({ email: '', name: '', surname: '', phone: '', role: 'employee', password: '' });
+      setEditingUser(null);
+      setIsDialogOpen(false);
+    } catch (error) {
+      toast({
+        title: 'Unable to save user',
+        description: error instanceof Error ? error.message : 'Server error',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (id === currentUser?.id) {
       toast({
         title: 'Cannot delete',
@@ -81,10 +109,17 @@ export const UsersPage = () => {
       return;
     }
 
-    const updatedUsers = users.filter(u => u.id !== id);
-    setUsers(updatedUsers);
-    saveUsers(updatedUsers);
-    toast({ title: 'User deleted', description: 'User has been removed successfully.' });
+    try {
+      await deleteUser(id);
+      setUsers(users.filter(u => u.id !== id));
+      toast({ title: 'User deleted', description: 'User has been removed successfully.' });
+    } catch (error) {
+      toast({
+        title: 'Unable to delete user',
+        description: error instanceof Error ? error.message : 'Server error',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleEdit = (user: User) => {

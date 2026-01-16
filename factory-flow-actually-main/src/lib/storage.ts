@@ -1,4 +1,3 @@
-// Client-side data storage utilities
 export interface User {
   id: string;
   email: string;
@@ -36,92 +35,90 @@ export interface Order {
   completedAt?: string;
 }
 
-const STORAGE_KEYS = {
-  USERS: 'manufacturing_users',
-  MATERIALS: 'manufacturing_materials',
-  PRODUCTS: 'manufacturing_products',
-  ORDERS: 'manufacturing_orders',
-  CURRENT_USER: 'manufacturing_current_user',
-};
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
 
-// Initialize default admin user
-export const initializeStorage = () => {
-  const users = getUsers();
-  if (users.length === 0) {
-    const defaultAdmin: User = {
-      id: crypto.randomUUID(),
-      email: 'admin@company.com',
-      name: 'Admin',
-      surname: 'User',
-      phone: '+370 600 00000',
-      role: 'admin',
-      password: 'admin123',
-    };
-    saveUsers([defaultAdmin]);
+const request = async <T>(path: string, options?: RequestInit): Promise<T> => {
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Request failed with status ${response.status}`);
   }
+
+  if (response.status === 204) {
+    return null as T;
+  }
+
+  return response.json() as Promise<T>;
 };
 
-// User operations
-export const getUsers = (): User[] => {
-  const data = localStorage.getItem(STORAGE_KEYS.USERS);
-  return data ? JSON.parse(data) : [];
-};
+export const getUsers = (): Promise<User[]> => request('/api/users');
 
-export const saveUsers = (users: User[]) => {
-  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-};
+export const createUser = (user: User): Promise<User> =>
+  request('/api/users', { method: 'POST', body: JSON.stringify(user) });
+
+export const updateUser = (user: User): Promise<User> =>
+  request(`/api/users/${user.id}`, { method: 'PUT', body: JSON.stringify(user) });
+
+export const deleteUser = (id: string): Promise<void> =>
+  request(`/api/users/${id}`, { method: 'DELETE' });
+
+export const getMaterials = (): Promise<Material[]> => request('/api/materials');
+
+export const createMaterial = (material: Material): Promise<Material> =>
+  request('/api/materials', { method: 'POST', body: JSON.stringify(material) });
+
+export const updateMaterial = (material: Material): Promise<Material> =>
+  request(`/api/materials/${material.id}`, { method: 'PUT', body: JSON.stringify(material) });
+
+export const deleteMaterial = (id: string): Promise<void> =>
+  request(`/api/materials/${id}`, { method: 'DELETE' });
+
+export const getProducts = (): Promise<Product[]> => request('/api/products');
+
+export const createProduct = (product: Product): Promise<Product> =>
+  request('/api/products', { method: 'POST', body: JSON.stringify(product) });
+
+export const updateProduct = (product: Product): Promise<Product> =>
+  request(`/api/products/${product.id}`, { method: 'PUT', body: JSON.stringify(product) });
+
+export const deleteProduct = (id: string): Promise<void> =>
+  request(`/api/products/${id}`, { method: 'DELETE' });
+
+export const getOrders = (): Promise<Order[]> => request('/api/orders');
+
+export const createOrder = (order: Order): Promise<Order> =>
+  request('/api/orders', { method: 'POST', body: JSON.stringify(order) });
+
+export const updateOrder = (order: Order): Promise<Order> =>
+  request(`/api/orders/${order.id}`, { method: 'PUT', body: JSON.stringify(order) });
+
+export const deleteOrder = (id: string): Promise<void> =>
+  request(`/api/orders/${id}`, { method: 'DELETE' });
 
 export const getCurrentUser = (): User | null => {
-  const data = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+  const data = localStorage.getItem('manufacturing_current_user');
   return data ? JSON.parse(data) : null;
 };
 
 export const setCurrentUser = (user: User | null) => {
   if (user) {
-    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+    localStorage.setItem('manufacturing_current_user', JSON.stringify(user));
   } else {
-    localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+    localStorage.removeItem('manufacturing_current_user');
   }
 };
 
-// Material operations
-export const getMaterials = (): Material[] => {
-  const data = localStorage.getItem(STORAGE_KEYS.MATERIALS);
-  return data ? JSON.parse(data) : [];
-};
-
-export const saveMaterials = (materials: Material[]) => {
-  localStorage.setItem(STORAGE_KEYS.MATERIALS, JSON.stringify(materials));
-};
-
-// Product operations
-export const getProducts = (): Product[] => {
-  const data = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
-  return data ? JSON.parse(data) : [];
-};
-
-export const saveProducts = (products: Product[]) => {
-  localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
-};
-
-// Order operations
-export const getOrders = (): Order[] => {
-  const data = localStorage.getItem(STORAGE_KEYS.ORDERS);
-  return data ? JSON.parse(data) : [];
-};
-
-export const saveOrders = (orders: Order[]) => {
-  localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
-};
-
-// Calculate order cost
 export const calculateOrderCost = (
   order: Pick<Order, 'products'>,
   products: Product[],
   materials: Material[]
 ): number => {
   let totalCost = 0;
-  
+
   order.products.forEach(({ productId, quantity }) => {
     const product = products.find(p => p.id === productId);
     if (product) {
@@ -133,28 +130,29 @@ export const calculateOrderCost = (
       });
     }
   });
-  
+
   return totalCost;
 };
 
-// Export to CSV
-export const exportToCSV = (data: any[], filename: string) => {
+export const exportToCSV = (data: Record<string, unknown>[], filename: string) => {
   if (data.length === 0) return;
-  
+
   const headers = Object.keys(data[0]);
   const csvContent = [
     headers.join(','),
-    ...data.map(row => 
-      headers.map(header => {
-        const value = row[header];
-        if (typeof value === 'string' && value.includes(',')) {
-          return `"${value}"`;
-        }
-        return value;
-      }).join(',')
-    )
+    ...data.map(row =>
+      headers
+        .map(header => {
+          const value = row[header];
+          if (typeof value === 'string' && value.includes(',')) {
+            return `"${value}"`;
+          }
+          return value;
+        })
+        .join(',')
+    ),
   ].join('\n');
-  
+
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
