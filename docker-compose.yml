@@ -1,0 +1,52 @@
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-factory_flow}
+      MYSQL_USER: ${MYSQL_USER:-factory_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-factory_pass}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./factory-flow-actually-main
+      dockerfile: Dockerfile.backend
+    restart: unless-stopped
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-factory_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-factory_pass}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-factory_flow}
+      PORT: 4000
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./factory-flow-actually-main
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_URL: ""
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
